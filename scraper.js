@@ -6,6 +6,10 @@ var cheerio = require('cheerio');
 var async = require('async');
 var url = require('url');
 
+if (!console.debug) {
+    console.debug = function () {};
+}
+
 console.log('Starting...');
 
 var wordsOfTheDay = [];
@@ -17,11 +21,11 @@ function scrapePage(currentUrl, wordsOfTheDay, cb) {
 
     request(encodeURI(currentUrl), function (error, response, html) {
         if (!error) {
-            //console.log(html);
+            //console.debug(html);
 
             var $ = cheerio.load(html);
 
-            //console.log($);
+            //console.debug($);
 
             var $quickDefBox = $(".quick-def-box");
             var $wordAndPronunciation = $(".word-and-pronunciation", $quickDefBox);
@@ -51,13 +55,17 @@ function scrapePage(currentUrl, wordsOfTheDay, cb) {
                 date: currentDate
             };
 
-            wordsOfTheDay.push(wordOfTheDay);
+            if (cb) {
+                console.debug("Callback with wordOfTheDay");
+                console.debug(wordOfTheDay);
 
-            console.log("Added: " + JSON.stringify(wordOfTheDay, null, 4));
+                cb(null, wordOfTheDay);
+            }
         }
-
-        if (cb) {
-            cb(error);
+        else {
+            if (cb) {
+                cb(error);
+            }
         }
     });
 }
@@ -65,26 +73,80 @@ function scrapePage(currentUrl, wordsOfTheDay, cb) {
 function scrapePageRecursive(wordsOfTheDay, maxWordsToScrap, millisecondsBetweenCalls, cb) {
     var currentUrl = wordsOfTheDay.length > 0 ? wordsOfTheDay[wordsOfTheDay.length - 1].previousWordUrl : seedUrl;
 
-    scrapePage(currentUrl, wordsOfTheDay, function scrapePageNext(error) {
+    console.debug("seedUrl: " + seedUrl);
+
+    console.debug("wordsOfTheDay.length: " + wordsOfTheDay.length);        
+    console.debug("currentUrl: " + currentUrl);
+
+    // Backward from current Url
+    console.log("Starting backward scrapping with Url: " + currentUrl);
+    scrapePageRecursiveForGivenUrl(wordsOfTheDay, currentUrl, true, maxWordsToScrap, millisecondsBetweenCalls, function (error) {
         if (error) {
             console.log("Something went wrong.");
             console.log(error);
 
-            cb();
+            cb(error);
 
             return;
         }
 
-        var previousWordUrl = wordsOfTheDay[wordsOfTheDay.length - 1].previousWordUrl;
+        console.debug("wordsOfTheDay.length: " + wordsOfTheDay.length);        
+        console.debug("wordsOfTheDay[1].nextWordUrl: " + wordsOfTheDay[1].nextWordUrl);
 
-        if (previousWordUrl) {
-            console.log("Continue to call scrapPage with previous Url: " + previousWordUrl);
+        currentUrl = wordsOfTheDay.length > 1 ? wordsOfTheDay[1].nextWordUrl : seedUrl;
+        wordsOfTheDay.shift();
+
+        // Forward from current Url
+        console.log("Starting forward scrapping with Url: " + currentUrl);
+        scrapePageRecursiveForGivenUrl(wordsOfTheDay, currentUrl, false, maxWordsToScrap, millisecondsBetweenCalls, cb);
+    });
+}
+
+function scrapePageRecursiveForGivenUrl(wordsOfTheDay, currentUrl, append, maxWordsToScrap, millisecondsBetweenCalls, cb) {
+    console.debug("scrapePageRecursiveForGivenUrl called with currentUrl: " + currentUrl);
+    if (!currentUrl) {
+        cb();
+
+        return;
+    }
+
+    scrapePage(currentUrl, wordsOfTheDay, function scrapePageNext(error, wordOfTheDay) {
+        if (error) {
+            console.log("Something went wrong.");
+            console.log(error);
+
+            cb(error);
+
+            return;
+        }
+
+        console.debug(wordOfTheDay);
+
+        var newCurrentWordUrl = "";
+
+        if (append) {
+            wordsOfTheDay.push(wordOfTheDay);
+
+            newCurrentWordUrl = wordsOfTheDay[wordsOfTheDay.length - 1].previousWordUrl;
+
+            console.log("Appended: " + JSON.stringify(wordOfTheDay, null, 4));
+        }
+        else {
+            wordsOfTheDay.unshift(wordOfTheDay);
+
+            newCurrentWordUrl = wordsOfTheDay[0].nextWordUrl;
+
+            console.log("Prepended: " + JSON.stringify(wordOfTheDay, null, 4));
+        }
+
+        if (newCurrentWordUrl) {
+            console.log("Continue to call scrapPage with Url: " + newCurrentWordUrl);
             console.log("wordsOfTheDay.length: " + wordsOfTheDay.length);
             console.log("maxWordsToScrap: " + maxWordsToScrap);
 
             if (wordsOfTheDay.length <= maxWordsToScrap) {
                 sleep(millisecondsBetweenCalls).then(function () {
-                    scrapePage(previousWordUrl, wordsOfTheDay, scrapePageNext);
+                    scrapePage(newCurrentWordUrl, wordsOfTheDay, scrapePageNext);
                 });
             }
             else {
@@ -95,7 +157,6 @@ function scrapePageRecursive(wordsOfTheDay, maxWordsToScrap, millisecondsBetween
             cb();
         }
     });
-
 }
 
 function readFromFile(fileName, cb) {

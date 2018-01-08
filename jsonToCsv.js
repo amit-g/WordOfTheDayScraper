@@ -18,7 +18,7 @@ fs.readFile(inputFileName, function (err, data) {
     });
 
     //var output = [];
-    var headers = ["Company Name", "Category", "Contact Name", "Address", "City", "State", "Zip", "Website", "Phone", "Fax"];
+    var headers = ["Word", "Word Syllables", "Current Url", "Previous Word Url", "Next Word Url", "Date"];
 
     var columns = _.map(headers, function(col) {
         return camelize(col);
